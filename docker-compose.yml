@@ -1,0 +1,66 @@
+services:
+  database:
+    image: postgis/postgis:18-3.6-alpine
+    container_name: openstreetmap-tile-postgis
+    networks:
+      - openstreetmap-tile
+    ports:
+      - "5432:5432"
+    volumes:
+      - openstreetmap-tile-postgis:/var/lib/postgresql
+    environment:
+      - TZ=America/Sao_Paulo
+      - POSTGRES_PASSWORD=renderer
+      - POSTGRES_USER=renderer
+      - POSTGRES_DB=osm
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    command: >
+      -c max_connections=250
+      -c shared_buffers=2GB
+      -c temp_buffers=32MB
+      -c maintenance_work_mem=1GB
+      -c work_mem=256MB
+      -c synchronous_commit=off
+      -c effective_cache_size=24GB
+      -c wal_writer_delay=500ms
+      -c wal_level=minimal
+      -c wal_buffers=1024kB
+      -c min_wal_size=1GB
+      -c max_wal_size=2GB
+      -c commit_delay=10000
+      -c checkpoint_timeout=15min
+      -c checkpoint_completion_target=0.9
+      -c max_wal_senders=0
+      -c default_statistics_target=10000
+      -c random_page_cost=1.1
+      -c autovacuum_work_mem=2GB
+      -c track_activity_query_size=16384
+      -c fsync=off
+      -c jit=off
+  server:
+    image: vitorosan/openstreetmap-tile-server
+    container_name: openstreetmap-tile-server
+    volumes:
+      - openstreetmap-tile-updates:/data/updates
+      - openstreetmap-tile-cache:/var/cache/renderd/tiles
+    ports:
+      - "8080:8080"
+    command: "run"
+    environment:
+      - TZ=America/Sao_Paulo
+      - PGUSER=renderer
+      - PGPASSWORD=renderer
+      - PGDATABASE=osm
+      - PGHOST=openstreetmap-tile-postgis
+      - PGPORT=5432
+      - REPLICATION_URL=https://download.geofabrik.de/south-america/uruguay-updates
+      - MAX_INTERVAL_SECONDS=86400
+      - UPDATES=enabled
+volumes:
+  openstreetmap-tile-postgis:
+  openstreetmap-tile-cache:
+  openstreetmap-tile-updates:
+
+networks:
+  openstreetmap-tile:
+    name: openstreetmap-tile

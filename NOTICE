@@ -1,0 +1,20 @@
+This project is based on:
+
+Overv/openstreetmap-tile-server
+Copyright (c) 2014 Alexander Overvoorde
+Licensed under the MIT License.
+
+This repository contains substantial modifications including, but not limited to:
+
+- AlmaLinux 9 migration
+- External PostgreSQL/PostGIS support
+- Container hardening
+- Non-root execution
+- Modern build pipeline
+- Structured logging
+- Automatic update tooling
+- Enterprise deployment improvements
+
+Copyright 2026 Vitor Rodrigo Rosan
+
+Licensed under the Apache License, Version 2.0.
