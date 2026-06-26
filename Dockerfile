@@ -297,6 +297,11 @@ RUN wget -qO /usr/local/bin/supercronic https://github.com/aptible/supercronic/r
 
 FROM libbuild AS final
 
+LABEL org.opencontainers.image.title="AlmaLinux 9 OSM Tiles Server" \
+      org.opencontainers.image.description="Optimized OpenStreetMap tile server based on AlmaLinux 9 with decoupled PostgreSQL" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.source="https://github.com/vitorosan/openstreetmap-tile-server" \
+      org.opencontainers.image.authors="Vitor Rodrigo Rosan <vitorosan@gmail.com>"
 
 RUN cp /opt/openstreetmap-carto/fonts/* /usr/local/lib/mapnik/fonts/
 RUN sed -i 's/logging\.basicConfig(level=logging\.\(DEBUG\|WARNING\|INFO\))/logging.basicConfig(level=logging.\1, datefmt="%Y-%m-%d %H:%M:%S", format="%(asctime)s [%(levelname)s] %(message)s")/g' /opt/openstreetmap-carto/scripts/get-external-data.py

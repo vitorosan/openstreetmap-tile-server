@@ -22,6 +22,8 @@ Stateless architecture with external PostgreSQL/PostGIS, automatic map updates, 
 
 ## Requirements
 
+TODO: document this section
+
 ## Quick Start
 
 docker run \
