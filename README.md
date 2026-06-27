@@ -4,12 +4,18 @@ Enterprise-ready OpenStreetMap tile server based on AlmaLinux 9.
 
 Stateless architecture with external PostgreSQL/PostGIS, automatic map updates, structured logging and production-grade security.
 
+## Architecture
+
+Unlike many OpenStreetMap tile server images, this project does not embed PostgreSQL/PostGIS inside the container.
+
+Instead, the tile server and the database are deployed independently, resulting in a stateless application that is easier to operate in modern container platforms such as Docker, Kubernetes and OpenShift.
+
 ## Features
 
 - AlmaLinux 9 (RHEL compatible)
 - Latest Mapnik compiled from source
 - Latest mod_tile compiled from source
-- External PostgreSQL/PostGIS
+- External PostgreSQL/PostGIS managed separately
 - Non-root container
 - Automatic OSM updates
 - Structured JSON logs
@@ -22,7 +28,76 @@ Stateless architecture with external PostgreSQL/PostGIS, automatic map updates, 
 
 ## Requirements
 
-TODO: document this section
+Before running the container, ensure the following requirements are met.
+
+### PostgreSQL with PostGIS
+
+This image is **stateless** and requires an **external PostgreSQL/PostGIS database**. The database is used to store OpenStreetMap data and is **not** bundled with the container.
+
+Requirements:
+
+* PostgreSQL 16 or later (18 recommended)
+* PostGIS 3.6 or later
+* A dedicated database for OpenStreetMap data
+* A user with permission to create tables, indexes and extensions
+* A reliable network connection between the tile server and the database
+
+The database should be provisioned before starting the container.
+
+---
+
+### Storage
+
+Depending on the imported region, a significant amount of disk space may be required for:
+
+* PostgreSQL database
+* Rendered tile cache
+* Import files
+* Update state files
+* Log files
+
+Using SSD or NVMe storage is strongly recommended for production deployments.
+
+---
+
+### Memory
+
+The required amount of memory depends on the imported dataset.
+
+Typical recommendations are:
+
+| Dataset         | Recommended RAM |
+| --------------- | --------------: |
+| Small region    |          4–8 GB |
+| Country         |        16–32 GB |
+| Large continent |   64 GB or more |
+
+---
+
+### CPU
+
+Tile rendering is CPU intensive.
+
+For production deployments, multiple CPU cores are recommended to allow concurrent rendering requests and background update processing.
+
+---
+
+### Example PostgreSQL Container
+
+The following example starts a PostgreSQL/PostGIS container suitable for development or evaluation purposes.
+
+```bash
+docker run -d \
+  --name postgis \
+  -e POSTGRES_DB=osm \
+  -e POSTGRES_USER=renderer \
+  -e POSTGRES_PASSWORD=renderer \
+  -v osm-db:/var/lib/postgresql/data \
+  postgis/postgis:18-3.6-alpine
+```
+
+For production environments, database configuration should be adjusted according to the available hardware and expected workload.
+
 
 ## Quick Start
 
@@ -111,9 +186,9 @@ The directory must contain the following files:
 | File                | Description                                                                                                                                                        |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `region.osm.pbf`    | OpenStreetMap dataset to be imported into the database.                                                                                                            |
-| `region.poly`       | Polygon file defining the geographic boundaries used for incremental updates.                                                                                      |
+| `region.poly`       | Polygon file defining the geographic boundaries used for incremental updates. This file is optional.                                                                                      |
 | `state.txt`         | Replication state file corresponding to the downloaded PBF. It allows incremental updates to continue from the correct sequence without requiring a full reimport. |
-| `configuration.txt` | Configuration file containing the download and replication metadata associated with the dataset.                                                                   |
+| `configuration.txt` | This file defines the data source and download parameters. It must contain at least the baseUrl (pointing to the OSM replication directory, e.g., https://planet.openstreetmap.org/replication/minute/) and maxInterval (controlling how many seconds of changes to download per run).                                                                    |
 
 Example:
 
@@ -218,6 +293,68 @@ If this volume is not persisted, the tile cache is recreated on demand as tiles 
 - Enable persistent tile cache
 - Use at least 32 GB RAM for Brazil region
 - Prefer PostGIS on NVMe
+
+## PostgreSQL Performance Tuning
+
+OpenStreetMap imports and tile rendering place a significantly different workload on PostgreSQL than a typical OLTP application. For best performance, it is recommended to dedicate the database server exclusively to the tile server and tune PostgreSQL accordingly.
+
+The following example demonstrates a PostgreSQL/PostGIS container configured for importing and serving a large OpenStreetMap dataset. The values shown are intended as a starting point and should be adjusted based on the available CPU, memory and storage.
+
+```bash
+docker run --rm -d \
+    --name=openstreetmap-tile-postgis \
+    --shm-size=1g \
+    -v osmtiles-database:/var/lib/postgresql \
+    -p 5432:5432 \
+    -e TZ=America/Sao_Paulo \
+    -e POSTGRES_PASSWORD=renderer \
+    -e POSTGRES_USER=renderer \
+    -e POSTGRES_DB=osm \
+    -e POSTGRES_HOST_AUTH_METHOD=trust \
+    postgis/postgis:18-3.6-alpine \
+    -c max_connections=250 \
+    -c shared_buffers=2GB \
+    -c temp_buffers=32MB \
+    -c maintenance_work_mem=1GB \
+    -c work_mem=256MB \
+    -c synchronous_commit=off \
+    -c effective_cache_size=24GB \
+    -c wal_writer_delay=500ms \
+    -c wal_level=minimal \
+    -c wal_buffers=1024kB \
+    -c min_wal_size=1GB \
+    -c max_wal_size=2GB \
+    -c commit_delay=10000 \
+    -c checkpoint_timeout=15min \
+    -c checkpoint_completion_target=0.9 \
+    -c max_wal_senders=0 \
+    -c default_statistics_target=10000 \
+    -c random_page_cost=1.1 \
+    -c autovacuum_work_mem=2GB \
+    -c track_activity_query_size=16384 \
+    -c fsync=off \
+    -c jit=off
+```
+
+### Notes
+
+* These settings are intended for a **dedicated PostgreSQL/PostGIS instance** used exclusively by this tile server.
+* The optimal values depend on the amount of available RAM, CPU cores and storage performance.
+* SSD or NVMe storage is strongly recommended.
+* `fsync=off` and `synchronous_commit=off` improve import performance but increase the risk of data loss in the event of an unexpected power failure. Consider enabling these settings in production environments where durability is required.
+* `wal_level=minimal` and `max_wal_senders=0` are appropriate for standalone deployments that do not use replication.
+* Review PostgreSQL settings before using them in shared database servers or high-availability environments.
+
+## Further Reading
+
+The following resources provide additional information about running a production-grade OpenStreetMap tile server:
+
+- [osm2pgsql Manual](https://osm2pgsql.org/doc/manual.html)
+- [Switch2OSM – Serving Tiles](https://switch2osm.org/serving-tiles/)
+- [OpenStreetMap Wiki – Tile Servers](https://wiki.openstreetmap.org/wiki/Tile_servers)
+- [PostgreSQL Runtime Configuration](https://www.postgresql.org/docs/current/runtime-config.html)
+- [PostGIS Documentation](https://postgis.net/documentation/)
+
 
 ## Examples
 
