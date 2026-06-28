@@ -102,7 +102,7 @@ For production environments, database configuration should be adjusted according
 ## Quick Start
 
 docker run \
-  -e PGHOST=...
+  -e PGHOST=... \
   -e PGPORT=5432 \
   -e PGDATABASE=osm \
   -e PGUSER=osm \
